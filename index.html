@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Wordle PPY</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="script.js" defer></script>
+</head>
+
+<body>
+  <div class="container" id="container">
+    <h1>Wordle PPY</h1>
+    <label id="word-lengthtxt" for="word-length">Selecciona el tamaño de la palabra:</label>
+    <select id="word-length">
+      <option value="3">3 letras</option>
+      <option value="4">4 letras</option>
+      <option value="5" selected>5 letras</option>
+      <option value="6">6 letras</option>
+      <option value="7">7 letras</option>
+      <option value="8">8 letras</option>
+      <option value="9">9 letras</option>
+      <option value="10">10 letras</option>
+    </select>
+    <button id="start-button">Empezar</button>
+    <form action="#">
+      <input type="text" id="guess-input" placeholder="Ingrese su palabra">
+      <button id="guess-button">Intentar</button>
+    </form>
+    <p id="loading-message">Cargando palabra...</p>
+    <div id="error-message"></div>
+    <div id="grid"></div>
+    <p id="guesses"></p>
+    <button id="reset-button">Volver a jugar</button>
+  </div>
+</body>
+
+</html>
