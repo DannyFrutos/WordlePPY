@@ -1,147 +1,274 @@
-const MAX_INTENTOS = 6;
+const FLIP_ANIMATION_DURATION = 500;
+const DANCE_ANIMATION_DURATION = 500;
+const MAX_ATTEMPTS = 6;
+const keyboard = document.querySelector("[data-keyboard]");
+const guessGrid = document.querySelector("[data-guess-grid]");
+const alertContainer = document.querySelector("[data-alert-container]");
+const restartButton = document.getElementById("restartButton");
+let targetWord = "";
+let remainingAttempts = MAX_ATTEMPTS;
+let gameEnded = false;
 
-let intentosRestantes = MAX_INTENTOS;
-let palabraSeleccionada;
-const botonIntentar = document.getElementById("guess-button");
-const inputIntento = document.getElementById('guess-input');
-const container = document.getElementById('container');
-const botonReiniciar = document.getElementById("reset-button");
-const botonEmpezar = document.getElementById("start-button");
-const wordLengthSelector = document.getElementById("word-length");
-const selectorLength = document.getElementById("word-lengthtxt");
-const loading = document.getElementById('loading-message');
-const guesses = document.getElementById('guesses');
+fetch("https://random-word-api.herokuapp.com/word?lang=es&length=5")
+	.then(response => response.json())
+	.then(data => {
+		targetWord = data[0].toLowerCase();
+		console.log("Palabra obtenida:", targetWord);
+		startInteraction();
+	})
+	.catch(error => console.error("Error al obtener la palabra:", error));
 
-botonIntentar.addEventListener('click', intentar);
-botonReiniciar.addEventListener('click', reiniciarJuego);
-botonEmpezar.addEventListener('click', iniciarJuego);
+restartButton.addEventListener("click", restartGame);
+function startInteraction() {
+	if (gameEnded) {
+		return;
+	}
 
-async function seleccionarPalabraAleatoria() {
-    const wordLength = wordLengthSelector.value;
-    const API_URL = `https://random-word-api.herokuapp.com/word?length=${wordLength}&lang=es`;
-
-    return fetch(API_URL)
-        .then(response => response.json())
-        .then(response => response[0].toUpperCase())
-        .catch(err => {
-            console.error(err);
-            throw err;
-        });
+	document.addEventListener("click", handleMouseClick);
+	document.addEventListener("keydown", handleKeyPress);
 }
 
-async function iniciarJuego() {
-    try {
-        wordLengthSelector.style.display = 'none';
-        botonEmpezar.style.display = 'none';
-        selectorLength.style.display = 'none';
-        loading.style.display = 'inline-block';
-
-        palabraSeleccionada = await seleccionarPalabraAleatoria();
-        
-        console.log('Palabra seleccionada:', palabraSeleccionada);
-
-        inputIntento.setAttribute('maxlength', palabraSeleccionada.length);
-        inputIntento.style.display = 'block';
-        botonIntentar.style.display = 'inline-block';
-        loading.style.display = 'none';
-    } catch (error) {
-        console.error('Error al iniciar el juego:', error);
-    }
+function stopInteraction() {
+	document.removeEventListener("click", handleMouseClick);
+	document.removeEventListener("keydown", handleKeyPress);
 }
 
-function intentar() {
-    const intento = obtenerIntentoUsuario();
-    const errorMessageDiv = document.getElementById('error-message');
-    errorMessageDiv.textContent = '';
+function restartGame() {
+	targetWord = "";
+	remainingAttempts = MAX_ATTEMPTS;
+	gameEnded = false;
 
-    if (intento.length !== palabraSeleccionada.length) {
-        errorMessageDiv.textContent = 'La palabra ingresada no tiene el tamaño correcto.';
-        return;
-    }
+	fetch("https://random-word-api.herokuapp.com/word?lang=es&length=5")
+		.then(response => response.json())
+		.then(data => {
+			targetWord = data[0].toLowerCase();
+			console.log("Nueva palabra obtenida:", targetWord);
+		})
+		.catch(error => console.error("Error al obtener la palabra:", error));
 
-    const grid = document.getElementById("grid");
-    const row = crearRow(intento, palabraSeleccionada);
-    grid.appendChild(row);
-
-    if (intento === palabraSeleccionada) {
-        finalizarJuego(0);
-    } else {
-        intentosRestantes--;
-
-        if (intentosRestantes === 0) {
-            finalizarJuego(1);
-        }
-    }
-
-    inputIntento.value = '';
+	resetInterface();
+	startInteraction();
 }
 
-function obtenerIntentoUsuario() {
-    return inputIntento.value.toUpperCase();
+function resetInterface() {
+	const tiles = guessGrid.querySelectorAll(".tile");
+	tiles.forEach(tile => {
+		tile.textContent = "";
+		delete tile.dataset.state;
+		delete tile.dataset.letter;
+		tile.classList.remove("correct-grid", "wrong-location-grid", "wrong", "shake", "flip", "dance");
+	});
+
+	const keys = keyboard.querySelectorAll("[data-key]");
+	keys.forEach(key => {
+		key.classList.remove("correct", "wrong-location", "wrong");
+	});
+
+	const alerts = alertContainer.querySelectorAll(".alert");
+	alerts.forEach(alert => alert.remove());
+}
+function handleMouseClick(e) {
+	if (e.target.matches("[data-key]") && !gameEnded) {
+		pressKey(e.target.dataset.key);
+		return;
+	}
+	if (e.target.matches("[data-enter]")) {
+		submitGuess(targetWord);
+		return;
+	}
+	if (e.target.matches("[data-delete]") && !gameEnded) {
+		deleteKey();
+		return;
+	}
 }
 
-function crearRow(intento, palabra) {
-    const row = document.createElement('div');
-    row.className = 'row';
+function handleKeyPress(e) {
+	if (gameEnded) {
+		return;
+	}
 
-    for (let i = 0; i < palabra.length; i++) {
-        const letra = crearLetra(intento[i], palabra[i]);
-        letra.style.animationDelay = `${i * 0.5}s`;
-        row.appendChild(letra);
-    }
+	if ((e.key === "Backspace" || e.key === "Delete") && !gameEnded) {
+		deleteKey();
+		return;
+	}
 
-    return row;
+	if (e.key === "Enter" && !gameEnded) {
+		e.preventDefault();
+		const activeTiles = getActiveTiles();
+
+		if (activeTiles.length === 5) {
+			submitGuess(targetWord);
+		} else {
+			showAlert("No has ingresado la cantidad correcta de letras");
+		}
+
+		return;
+	}
+
+	if (e.key.match(/^[a-z]$/) && !gameEnded) {
+		pressKey(e.key);
+	}
 }
 
-function crearLetra(letraIntento, letraPalabra) {
-    const span = document.createElement('span');
-    span.className = 'letter';
-    span.innerHTML = letraIntento;
-
-    if (letraIntento === letraPalabra) {
-        span.style.backgroundColor = '#79b851';
-    } else if (palabraSeleccionada.includes(letraIntento)) {
-        span.style.backgroundColor = '#f3c237';
-    } else {
-        span.style.backgroundColor = '#a4aec4';
-    }
-
-    return span;
+function pressKey(key) {
+	const activeTiles = getActiveTiles();
+	if (activeTiles.length >= 5 || gameEnded) {
+		return;
+	}
+	const nextTile = guessGrid.querySelector(".tile:not([data-letter])");
+	if (nextTile) {
+		nextTile.dataset.letter = key.toLowerCase();
+		nextTile.textContent = key;
+		nextTile.dataset.state = "active";
+	}
 }
 
-function finalizarJuego(tipo) {
-    inputIntento.disabled = true;
-    botonIntentar.disabled = true;
-    botonIntentar.style.display = 'none';
-
-    const tiempoTotalAnimacion = palabraSeleccionada.length * 0.5 * 1000;
-
-    setTimeout(() => {
-        botonIntentar.style.display = 'none';
-        container.style.boxShadow = tipo === 0
-            ? '0 14px 28px rgba(74, 189, 21, 0.25), 0 10px 10px rgba(17, 203, 27, 0.22)'
-            : '0 14px 28px rgba(207, 14, 14, 0.25), 0 10px 10px rgba(221, 3, 3, 0.22)';
-        
-        guesses.innerHTML = tipo === 0
-            ? '<h1 class="ganaste">Ganaste :D 🥳</h1>'
-            : '<h1 class="perdiste">Perdiste D: 😵</h1>';
-        
-        botonReiniciar.style.display = 'inline-block';
-    }, tiempoTotalAnimacion);
+function deleteKey() {
+	const activeTiles = getActiveTiles();
+	const lastTile = activeTiles[activeTiles.length - 1];
+	if (lastTile == null || gameEnded) {
+		return;
+	}
+	lastTile.textContent = "";
+	delete lastTile.dataset.state;
+	delete lastTile.dataset.letter;
 }
 
-function reiniciarJuego() {
-    container.style.boxShadow = '0 10px 18px rgba(0, 0, 0, 0.25), 0 10px 10px rgba(0, 0, 0, 0.22)';
-    wordLengthSelector.style.display = 'inline-block';
-    botonEmpezar.style.display = 'inline-block';
-    selectorLength.style.display = 'inline-block';
-    inputIntento.style.display = 'none';
-    botonIntentar.style.display = 'none';
-    document.getElementById('grid').innerHTML = '';
-    guesses.innerHTML = '';
-    botonReiniciar.style.display = 'none';
-    inputIntento.value = '';
-    inputIntento.disabled = false;
-    botonIntentar.disabled = false;
-    intentosRestantes = MAX_INTENTOS;
+function submitGuess(targetWord) {
+	const activeTiles = [...getActiveTiles()];
+	if (remainingAttempts === 0) {
+		showAlert("¡Se han agotado los intentos! La palabra correcta era: " + targetWord);
+		gameEnded = true;
+		return;
+	}
+
+	if (activeTiles.length !== 5) {
+		showAlert("No has ingresado la cantidad correcta de letras");
+		shakeTiles(activeTiles);
+		return;
+	}
+
+	remainingAttempts--;
+
+	if (targetWord === activeTiles.map(tile => tile.dataset.letter).join('')) {
+		showAlert("¡Correcto! Has adivinado la palabra.");
+
+		activeTiles.forEach(tile => {
+			tile.classList.add("correct-grid");
+			const letter = tile.dataset.letter;
+			const key = keyboard.querySelector(`[data-key="${letter}"i]`);
+			key.classList.add("correct");
+		});
+		danceTiles(activeTiles);
+		gameEnded = true;
+		stopInteraction();
+		return;
+	}
+
+	stopInteraction();
+	activeTiles.forEach((tile, index, array) => flipTile(tile, index, array, targetWord));
+}
+
+
+function flipTile(tile, index, array, targetWord) {
+	const letter = tile.dataset.letter;
+	const key = keyboard.querySelector(`[data-key="${letter}"i]`);
+
+	const onTransitionEnd = () => {
+		tile.classList.remove("flip");
+
+		if (targetWord[index] === letter) {
+			tile.dataset.state = "correct";
+			key.classList.add("correct");
+
+			if (index === array.length - 1) {
+				const isWordGuessed = targetWord === array.map(tile => tile.dataset.letter).join('');
+
+				if (isWordGuessed) {
+					array.forEach((tile, index) => {
+						setTimeout(() => {
+							tile.classList.add("correct-grid");
+						}, (index * FLIP_ANIMATION_DURATION) / 2);
+					});
+				}
+			}
+		} else if (targetWord.includes(letter)) {
+			tile.dataset.state = "wrong-location";
+			tile.classList.add("wrong-location-grid");
+			key.classList.add("wrong-location");
+		} else {
+			tile.dataset.state = "wrong";
+			key.classList.add("wrong");
+		}
+
+		if (index === array.length - 1) {
+			tile.removeEventListener("transitionend", onTransitionEnd);
+
+			startInteraction();
+			checkAttempts();
+		}
+	};
+
+	tile.addEventListener("transitionend", onTransitionEnd, { once: true });
+
+	setTimeout(() => {
+		tile.classList.add("flip");
+	}, (index * FLIP_ANIMATION_DURATION) / 2);
+}
+
+function danceTiles(tiles) {
+	tiles.forEach((tile, index) => {
+		setTimeout(() => {
+			tile.classList.add("dance");
+			tile.addEventListener(
+				"animationend",
+				() => {
+					tile.classList.remove("dance");
+				},
+				{ once: true }
+			);
+		}, (index * DANCE_ANIMATION_DURATION) / 5);
+	});
+}
+
+function getActiveTiles() {
+	return guessGrid.querySelectorAll("[data-state='active']");
+}
+
+function showAlert(message, duration = 1000) {
+	const alert = document.createElement("div");
+	alert.textContent = message;
+	alert.classList.add("alert");
+	alertContainer.prepend(alert);
+
+	if (duration == null) return;
+
+	setTimeout(() => {
+		alert.classList.add("hide");
+		alert.addEventListener("transitionend", () => {
+			alert.remove();
+		});
+	}, duration);
+}
+
+function shakeTiles(tiles) {
+	tiles.forEach((tile) => {
+		tile.classList.add("shake");
+		tile.addEventListener(
+			"animationend",
+			() => {
+				tile.classList.remove("shake");
+			},
+			{ once: true }
+		);
+	});
+}
+
+function checkAttempts() {
+	if (remainingAttempts === 0) {
+		showAlert("¡Se han agotado los intentos! La palabra correcta era: " + targetWord);
+		gameEnded = true;
+	} else {
+		showAlert(`Te quedan ${remainingAttempts} intentos.`);
+	}
 }
